@@ -20,12 +20,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Hadoop {
+    static Long start;
     private static final Map<String, Double> ratingsGlobal = new HashMap<>();
     private static final Map<String, AvgScore> directorsAndFilmsGlobal = new HashMap<>();
 
     public static class CrewMapper extends Mapper<LongWritable, Text, Text, Text> {
+
         @Override
         protected void setup(Context context) throws IOException {
+            start = System.currentTimeMillis();
             try (BufferedReader br = new BufferedReader(new FileReader(context.getConfiguration().get("ratingsFileName")))) {
                 String line;
                 br.readLine();
@@ -64,22 +67,18 @@ public class Hadoop {
         }
     }
 
+    public static class AverageCombiner extends Reducer<Text, Text, Text, Text> {
+        @Override
+        protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            performReduce(values);
+        }
+    }
+
+
     public static class AverageReducer extends Reducer<Text, Text, Text, Text> {
         @Override
         protected void reduce(Text key, Iterable<Text> values, Context context) {
-            for (Text value : values) {
-                String tconst = value.toString().split(",")[1];
-                String director = value.toString().split(",")[0];
-                Double rating;
-                if ((rating = ratingsGlobal.get(tconst)) != null) {
-                    AvgScore item = directorsAndFilmsGlobal.get(director);
-                    if (item == null) {
-                        directorsAndFilmsGlobal.put(director, new AvgScore(rating, 1));
-                    } else {
-                        directorsAndFilmsGlobal.put(director, new AvgScore(item.getAvgSum() + rating, item.getCounter() + 1));
-                    }
-                }
-            }
+            performReduce(values);
         }
 
         @Override
@@ -87,6 +86,24 @@ public class Hadoop {
             for (String s : directorsAndFilmsGlobal.keySet()) {
                 Double avgForDirector = directorsAndFilmsGlobal.get(s).getAvgForDirector();
                 System.out.println(s + ", " + avgForDirector);
+            }
+            Long end = System.currentTimeMillis();
+            System.out.println("Time:" + (end - start)+ " ms");
+        }
+    }
+
+    private static void performReduce(Iterable<Text> values) {
+        for (Text value : values) {
+            String tconst = value.toString().split(",")[1];
+            String director = value.toString().split(",")[0];
+            Double rating;
+            if ((rating = ratingsGlobal.get(tconst)) != null) {
+                AvgScore item = directorsAndFilmsGlobal.get(director);
+                if (item == null) {
+                    directorsAndFilmsGlobal.put(director, new AvgScore(rating, 1));
+                } else {
+                    directorsAndFilmsGlobal.put(director, new AvgScore(item.getAvgSum() + rating, item.getCounter() + 1));
+                }
             }
         }
     }
@@ -99,12 +116,15 @@ public class Hadoop {
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
         job.setMapperClass(CrewMapper.class);
+        job.setCombinerClass(AverageCombiner.class);
         job.setReducerClass(AverageReducer.class);
         job.setInputFormatClass(TextInputFormat.class);
         job.setOutputFormatClass(TextOutputFormat.class);
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
         System.exit(job.waitForCompletion(true) ? 0 : 1);
+
     }
 }
 

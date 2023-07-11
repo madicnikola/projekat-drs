@@ -11,6 +11,7 @@ public class Sequential {
     private static final Map<String, AvgScore> directorsFilmsMap = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
+        Long start = System.currentTimeMillis();
         if (args.length != 2) {
             System.out.println("Java director movies average rating title.ratings.tsv title.crew.tsv");
             return;
@@ -63,6 +64,8 @@ public class Sequential {
                 System.out.println(s + ", " + avgForDirector);
             }
         }
+        Long end = System.currentTimeMillis();
+        System.out.println((end - start) + " ms");
     }
 }
 
